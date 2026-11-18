@@ -17,7 +17,7 @@ export async function signIn() {
   const id = await clientId();
   if (!id) throw new Error('Add your Google client ID in Settings first.');
   const state = crypto.getRandomValues(new Uint32Array(2)).join('');
-  sessionStorage.setItem('oauthState', state);
+  await db.kv.set('oauthState', state);   // IndexedDB survives the trip out to Google and back
   const params = new URLSearchParams({
     client_id: id,
     redirect_uri: redirectUri(),
@@ -34,7 +34,8 @@ export async function handleRedirect() {
   if (!location.hash.includes('access_token=')) return false;
   const p = new URLSearchParams(location.hash.slice(1));
   history.replaceState(null, '', location.pathname + location.search);
-  if (p.get('state') !== sessionStorage.getItem('oauthState')) return false;
+  if (p.get('state') !== (await db.kv.get('oauthState'))) return false;
+  await db.kv.set('oauthState', null);
   const expires = Date.now() + (Number(p.get('expires_in')) - 60) * 1000;
   await db.kv.set('driveToken', { token: p.get('access_token'), expires });
   return true;

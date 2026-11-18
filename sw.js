@@ -1,8 +1,8 @@
 // App-shell cache so the app opens without internet. Audio is stored separately (IndexedDB).
-const VERSION = 'v1';
+const VERSION = 'v3';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
-  'js/app.js', 'js/db.js', 'js/config.js', 'js/podcasts.js', 'js/drive.js', 'js/downloads.js', 'js/player.js',
+  'js/app.js', 'js/db.js', 'js/config.js', 'js/podcasts.js', 'js/drive.js', 'js/downloads.js', 'js/player.js', 'js/net.js',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
@@ -20,6 +20,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  if (url.pathname.includes('/mirror/') || url.pathname.includes('/test/')) return;   // always live
   e.respondWith(
     fetch(e.request)
       .then(res => {

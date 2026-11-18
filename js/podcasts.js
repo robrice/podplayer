@@ -1,6 +1,6 @@
 // Podcast search (Apple's free directory), RSS parsing, and refreshing subscriptions.
 import * as db from './db.js';
-import { CONFIG } from './config.js';
+import { fetchFeedText } from './net.js';
 
 const ITUNES_NS = 'http://www.itunes.com/dtds/podcast-1.0.dtd';
 const CONTENT_NS = 'http://purl.org/rss/1.0/modules/content/';
@@ -18,25 +18,6 @@ export async function search(term) {
       author: r.artistName,
       artwork: r.artworkUrl600 || r.artworkUrl100,
     }));
-}
-
-async function proxyUrl() {
-  return (await db.kv.get('proxy', CONFIG.proxy)) || '';
-}
-
-// Fetch from a server that may not allow browsers; falls back to the proxy if one is set.
-export async function fetchCors(url, opts = {}) {
-  try {
-    const res = await fetch(url, opts);
-    if (res.ok) return res;
-    throw new Error(`HTTP ${res.status}`);
-  } catch (err) {
-    const proxy = await proxyUrl();
-    if (!proxy) throw err;
-    const res = await fetch(`${proxy}?url=${encodeURIComponent(url)}`, opts);
-    if (!res.ok) throw new Error(`HTTP ${res.status} via proxy`);
-    return res;
-  }
 }
 
 function text(el, tag, ns) {
@@ -103,9 +84,11 @@ export function parseFeed(xmlText, feedUrl) {
   return { podcast, episodes };
 }
 
-export async function loadFeed(feedUrl) {
-  const res = await fetchCors(feedUrl);
-  return parseFeed(await res.text(), feedUrl);
+export async function loadFeed(feedUrl, hint) {
+  const { text, route } = await fetchFeedText(feedUrl, hint);
+  const parsed = parseFeed(text, feedUrl);
+  parsed.podcast.route = route;   // remember what worked for next refresh
+  return parsed;
 }
 
 // Save new episodes but keep what we already know (played flag) about old ones.
@@ -142,7 +125,7 @@ export async function refreshAll() {
   const failed = [];
   await Promise.all(subs.map(async sub => {
     try {
-      const { podcast, episodes } = await loadFeed(sub.feedUrl);
+      const { podcast, episodes } = await loadFeed(sub.feedUrl, sub.route);
       podcast.artwork = podcast.artwork || sub.artwork;
       added += await merge(podcast, episodes);
     } catch {

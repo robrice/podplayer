@@ -1,3 +1,6 @@
 .DS_Store
 .idea/
 __pycache__/
+test/top.json
+mirror/*.xml
+mirror/index.json

@@ -1,6 +1,7 @@
 // Offline audio, stored on the phone in IndexedDB.
 import * as db from './db.js';
 import { fetchBlob } from './drive.js';
+import { candidates } from './net.js';
 
 const listeners = new Set();
 export const onChange = fn => listeners.add(fn);
@@ -47,22 +48,6 @@ export async function save(track) {
     inFlight.delete(track.id);
     notify();
   }
-}
-
-// Episode links often pass through measurement redirects that block browsers, with the real
-// address embedded in the path (…/podtrac.com/redirect.mp3/pdst.fm/e/cdn.host.com/file.mp3).
-// After the original link, try each embedded host, innermost first.
-export function candidates(url) {
-  const out = [url];
-  try {
-    const u = new URL(url);
-    const parts = u.pathname.split('/');
-    const isHost = s => /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,12}$/i.test(s) && !/\.(mp3|m4a|aac|mp4|ogg|opus|wav)$/i.test(s);
-    for (let i = parts.length - 1; i > 0; i--) {
-      if (isHost(parts[i])) out.push(`https://${parts.slice(i).join('/')}${u.search}`);
-    }
-  } catch { /* not a URL */ }
-  return out;
 }
 
 async function readWithProgress(res, track) {

@@ -1,0 +1,30 @@
+# Podcast feeds to mirror into the site (one URL per line), for servers that block web apps.
+# Shows can also be added from the app: it opens a GitHub issue titled "mirror: <feed url>".
+# Popular shows found blocked in the Nov 2026 top-100 test:
+https://audioboom.com/channels/5093219.rss
+https://audioboom.com/channels/5114286.rss
+https://audioboom.com/channels/5149464.rss
+https://audioboom.com/channels/5166624.rss
+https://feeds.acast.com/public/shows/679acff465f74095106abfaa
+https://feeds.acast.com/public/shows/6958077f1002b08bc8529c23
+https://feeds.npr.org/344098539/podcast.xml
+https://feeds.npr.org/381444908/podcast.xml
+https://feeds.npr.org/500005/podcast.xml
+https://feeds.npr.org/510310/podcast.xml
+https://feeds.npr.org/510318/podcast.xml
+https://feeds.npr.org/510355/podcast.xml
+https://feeds.publicradio.org/public_feeds/marketplace
+https://podcastfeeds.nbcnews.com/2E7hl2MC
+https://podcastfeeds.nbcnews.com/HL4TzgYC
+https://rss.pdrl.fm/ff8ba6/audioboom.com/channels/5148149.rss
+https://www.spreaker.com/show/5895676/episodes/feed
+https://www.thisamericanlife.org/podcast/rss.xml
+# More NPR shows (NPR feeds always block web apps):
+https://feeds.npr.org/510289/podcast.xml
+https://feeds.npr.org/510298/podcast.xml
+https://feeds.npr.org/510351/podcast.xml
+https://feeds.npr.org/510338/podcast.xml
+https://feeds.npr.org/510333/podcast.xml
+https://feeds.npr.org/510312/podcast.xml
+https://feeds.npr.org/510325/podcast.xml
+https://feeds.npr.org/510208/podcast.xml

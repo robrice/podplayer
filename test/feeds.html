@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Feed compatibility test</title>
+<pre id="out">running</pre>
+<script type="module">
+  // Loads every feed in top.json the way the app does, then checks the newest episode can be downloaded.
+  import { fetchFeedText, candidates } from '../js/net.js';
+  import { parseFeed } from '../js/podcasts.js';
+  const out = document.getElementById('out');
+  // Don't lean on the public relay during bulk tests; anything that needs it gets mirrored instead.
+  const realFetch = window.fetch;
+  window.fetch = (u, o) => String(u).includes('allorigins.win') ? Promise.reject(new TypeError('relay disabled in test')) : realFetch(u, o);
+  const feeds = await (await fetch('top.json')).json();
+  const rows = [];
+
+  async function canDownload(url) {
+    for (const u of candidates(url)) {
+      try {
+        const ctrl = new AbortController();
+        const res = await fetch(u, { signal: ctrl.signal });
+        ctrl.abort();   // only need to know the browser was allowed to read it
+        if (res.ok) return u === url ? 'direct' : 'embedded';
+      } catch { /* next */ }
+    }
+    return 'no';
+  }
+
+  async function test(f) {
+    const t0 = performance.now();
+    try {
+      const { text, route } = await fetchFeedText(f.feedUrl);
+      const { episodes } = parseFeed(text, f.feedUrl);
+      const dl = episodes[0] ? await canDownload(episodes[0].audioUrl) : 'none';
+      return { title: f.title, route: route.via, secs: Math.round((performance.now() - t0) / 100) / 10, eps: episodes.length, dl };
+    } catch (e) {
+      return { title: f.title, route: 'FAIL', err: String(e.message || e), feed: f.feedUrl };
+    }
+  }
+
+  // 6 at a time
+  let next = 0;
+  await Promise.all(Array.from({ length: 6 }, async () => {
+    while (next < feeds.length) rows.push(await test(feeds[next++]));
+  }));
+  out.textContent = 'DONE ' + JSON.stringify(rows);
+</script>

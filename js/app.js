@@ -5,6 +5,7 @@ import * as drive from './drive.js';
 import * as downloads from './downloads.js';
 import * as player from './player.js';
 import { CONFIG } from './config.js';
+import { mirrorRequestUrl } from './net.js';
 
 const $ = sel => document.querySelector(sel);
 const main = $('#main');
@@ -146,8 +147,8 @@ async function renderLibrary() {
   `;
 }
 
-async function episodeRow(ep, podcast, showPodcast = false) {
-  const saved = await downloads.isSaved(ep.id);
+async function episodeRow(ep, podcast, showPodcast = false, savedIds = null) {
+  const saved = savedIds ? savedIds.has(ep.id) : await downloads.isSaved(ep.id);
   const pos = await player.position(ep.id);
   const prog = downloads.progress(ep.id);
   const left = pos && !pos.done && pos.t > 5 && ep.duration ? `${fmtDur(ep.duration - pos.t)} left` : fmtDur(ep.duration);
@@ -180,7 +181,7 @@ function showSearch(q) {
             <div class="row-main"><span class="title">${esc(r.title)}</span><span class="meta">${esc(r.author)}</span></div>
             <div class="row-actions">${subs.has(r.feedUrl)
               ? '<span class="meta">Added</span>'
-              : `<button class="pill" data-act="subscribe" data-feed="${esc(r.feedUrl)}" data-art="${esc(r.artwork)}">Add</button>`}</div>
+              : `<button class="pill" data-act="subscribe" data-feed="${esc(r.feedUrl)}" data-art="${esc(r.artwork)}" data-title="${esc(r.title)}">Add</button>`}</div>
           </li>`).join('') || '<li class="empty">No shows found.</li>'}</ul>`;
     } catch (e) {
       main.innerHTML = `${header('Search', { back: true })}<p class="error">${esc(e.message)}</p>`;
@@ -188,11 +189,17 @@ function showSearch(q) {
   });
 }
 
+const PAGE = 50;
+const shown = new Map();   // feedUrl -> how many episodes are listed
+
 function showPodcast(feedUrl) {
+  shown.set(feedUrl, PAGE);
   push(async () => {
     const p = await db.get('podcasts', feedUrl);
     if (!p) return pop();
     const eps = (await db.byIndex('episodes', 'feedUrl', feedUrl)).sort((a, b) => b.pubDate - a.pubDate);
+    const limit = shown.get(feedUrl) || PAGE;
+    const savedIds = new Set(await db.blobKeys());
     main.innerHTML = `${header(p.title, { back: true })}
       <div class="show-head">
         <img src="${esc(p.artwork)}" alt="">
@@ -202,7 +209,8 @@ function showPodcast(feedUrl) {
           <button class="pill subtle" data-act="unsubscribe" data-feed="${esc(feedUrl)}">Remove show</button>
         </div>
       </div>
-      <ul class="list">${(await Promise.all(eps.map(e => episodeRow(e, p)))).join('')}</ul>`;
+      <ul class="list">${(await Promise.all(eps.slice(0, limit).map(e => episodeRow(e, p, false, savedIds)))).join('')}</ul>
+      ${eps.length > limit ? `<p class="more"><button class="pill subtle" data-act="more" data-feed="${esc(feedUrl)}">Show ${Math.min(PAGE, eps.length - limit)} more</button></p>` : ''}`;
   });
 }
 
@@ -221,6 +229,26 @@ async function showNotes(id) {
         <button class="pill subtle" data-act="toggle-played" data-id="${esc(id)}">${ep.played ? 'Mark unplayed' : 'Mark played'}</button>
       </div>
       <div class="notes">${sanitize(ep.notes || '')}</div>
+    </div>`;
+  sheet.classList.add('open');
+}
+
+// A show's server blocks web apps: offer the GitHub feed mirror.
+function showBlocked(feedUrl, title) {
+  const sheet = $('#sheet');
+  sheet.innerHTML = `<div class="sheet-card">
+      <button class="grab" data-act="close-sheet" aria-label="Close"></button>
+      <h2>${esc(title || 'This show')} needs the feed mirror</h2>
+      <p>Its server blocks web apps like Podplayer. Your free GitHub mirror can copy the feed so the app can read it.</p>
+      <ol class="steps">
+        <li>Tap <b>Request mirror</b>. GitHub opens with the request filled in (sign in to GitHub if asked).</li>
+        <li>Tap <b>Submit new issue</b>.</li>
+        <li>Come back in about 2 minutes and tap <b>Add</b> again.</li>
+      </ol>
+      <div class="sheet-actions">
+        <a class="pill" href="${esc(mirrorRequestUrl(feedUrl, title))}" target="_blank" rel="noopener">Request mirror</a>
+        <button class="pill subtle" data-act="close-sheet">Not now</button>
+      </div>
     </div>`;
   sheet.classList.add('open');
 }
@@ -325,7 +353,7 @@ async function renderSettings() {
       </label>
       <label>Feed proxy URL (optional)
         <input name="proxy" value="${esc(proxy)}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
-        <span class="hint">Only needed for shows that won't load, such as NPR's.</span>
+        <span class="hint">Not needed normally. Shows whose servers block apps (such as NPR's) load through a free public relay; your own proxy is faster and more private.</span>
       </label>
       <label class="check"><input type="checkbox" name="deleteAfterPlay" ${delAfter ? 'checked' : ''}> Delete downloaded episodes after they finish</label>
       <button class="pill" type="submit">Save</button>
@@ -459,20 +487,33 @@ document.addEventListener('click', async e => {
     case 'subscribe':
       el.disabled = true;
       el.textContent = 'Adding…';
-      try {
-        const p = await pods.subscribe(feed, { artwork: el.dataset.art });
-        el.replaceWith(Object.assign(document.createElement('span'), { className: 'meta', textContent: 'Added' }));
-        toast(`Added ${p.title}`);
-      } catch (err) {
-        el.disabled = false;
-        el.textContent = 'Add';
-        toast(`Couldn't load this show (${err.message}). A feed proxy in Settings may fix it.`);
+      {
+        const slow = setTimeout(() => { el.textContent = 'Still loading…'; toast("This show's server is slow; it can take up to a minute."); }, 6000);
+        try {
+          const p = await pods.subscribe(feed, { artwork: el.dataset.art });
+          el.replaceWith(Object.assign(document.createElement('span'), { className: 'meta', textContent: 'Added' }));
+          toast(`Added ${p.title}`);
+        } catch (err) {
+          el.disabled = false;
+          el.textContent = 'Add';
+          console.warn('subscribe failed', feed, err);
+          showBlocked(feed, el.dataset.title);
+        } finally {
+          clearTimeout(slow);
+        }
       }
       break;
     case 'unsubscribe':
       if (confirm('Remove this show and its downloads?')) { await pods.unsubscribe(feed); pop(); }
       break;
     case 'show': showPodcast(feed); break;
+    case 'more': {
+      const keep = main.scrollTop;
+      shown.set(feed, (shown.get(feed) || PAGE) + PAGE);
+      await render();
+      main.scrollTop = keep;
+      break;
+    }
     case 'notes': showNotes(id); break;
     case 'close-sheet': closeSheet(); break;
     case 'play-ep': playEpisode(id); break;

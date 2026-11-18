@@ -28,8 +28,16 @@ Live at: https://robrice.github.io/podplayer/
 
 Google will say the app "hasn't been verified". That's expected for a personal app in Testing; choose Continue. Sign-in lasts about an hour, then the app asks again. Downloaded tracks play without signing in.
 
-## Optional: feed proxy for shows that won't load (e.g. NPR)
-Some podcast servers block web apps from reading their feed. To add those shows:
+## Shows whose servers block web apps (e.g. NPR)
+Some podcast servers block web apps from reading their feed. Podplayer handles most of them on its own:
+1. **Tracking links:** many feed addresses wrap the real one (for example `rss.pdrl.fm/…/feeds.megaphone.fm/…`); the app tries the inner address.
+2. **Feed mirror (free, GitHub):** a GitHub Actions job (`.github/workflows/pages.yml`, `tools/mirror.py`) copies blocked feeds into this site every 30 minutes, where the app can always read them. Feeds listed in `mirror/feeds.txt` are always mirrored. If you add a show that still won't load, the app offers **Request mirror**. That opens a pre-filled GitHub issue (`mirror: <feed url>`); submit it, and the show is mirrored within about 2 minutes. The job comments on the issue when it's done. Close the issue to stop mirroring that show.
+3. **Public relay:** as a last resort the app tries a free public relay (allorigins.win), which is often slow.
+
+The mirror is public: anyone can see which feeds are listed (only the blocked ones are).
+
+### Optional: your own proxy (Google Apps Script)
+Instead of the mirror you can run a private proxy under your Google account:
 1. Open https://script.google.com/ → **New project**, paste `apps-script/FeedProxy.gs`, save.
 2. **Deploy → New deployment → Web app**: Execute as **Me**, Who has access **Anyone** → Deploy, authorize.
 3. Copy the `/exec` URL into Podplayer → **Settings** → Feed proxy URL → **Save**.
