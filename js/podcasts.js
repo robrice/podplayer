@@ -156,6 +156,15 @@ export async function refreshAll() {
   return { added, failed };
 }
 
+// The player/download form of an episode.
+export function trackFor(ep, podcast) {
+  return {
+    id: ep.id, source: 'podcast', title: ep.title, audioUrl: ep.audioUrl, type: ep.type,
+    size: ep.size, duration: ep.duration, artwork: ep.artwork || podcast?.artwork || '',
+    subtitle: podcast?.title || '', podcastTitle: podcast?.title || '', feedUrl: ep.feedUrl,
+  };
+}
+
 export function parseOpml(xmlText) {
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
   return [...doc.getElementsByTagName('outline')]

@@ -12,7 +12,7 @@ Live at: https://robrice.github.io/podplayer/
 ## Features
 - **Podcasts:** search Apple's podcast directory, subscribe, mark played, Up Next queue, OPML import/export.
 - **Player:** back 15 s / forward 30 s, speed 0.8–2×, sleep timer (minutes or end of episode), resumes where you stopped, lock-screen and AirPods controls.
-- **Downloads:** keep episodes or Drive tracks on the phone for listening without internet. Episodes are deleted after they finish (can be turned off in Settings).
+- **Downloads:** keep episodes or Drive tracks on the phone for listening without internet. By default each device keeps the **newest 2 episodes of every show** downloaded automatically and removes older episode downloads (Settings: Off / 1 / 2 / 3 per device; what is playing or in Up Next is never removed; Drive music is never touched). Episodes are deleted after they finish (can be turned off in Settings).
 - **Music from Google Drive:** every Drive folder that has audio shows up. "Play" on a folder resumes at the first unfinished track, so a multi-part audiobook picks up where you left off.
 
 ## Sync between laptop and phone (free)

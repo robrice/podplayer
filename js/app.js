@@ -71,13 +71,7 @@ function sanitize(html) {
   return root.innerHTML;
 }
 
-function trackFromEpisode(ep, podcast) {
-  return {
-    id: ep.id, source: 'podcast', title: ep.title, audioUrl: ep.audioUrl, type: ep.type,
-    size: ep.size, duration: ep.duration, artwork: ep.artwork || podcast?.artwork || '',
-    subtitle: podcast?.title || '', podcastTitle: podcast?.title || '', feedUrl: ep.feedUrl,
-  };
-}
+const trackFromEpisode = pods.trackFor;
 
 // ---------- navigation ----------
 let tab = 'podcasts';
@@ -354,6 +348,7 @@ async function renderSettings() {
   const clientId = (await db.kv.get('googleClientId', '')) || CONFIG.googleClientId;
   const proxy = await db.kv.get('proxy', CONFIG.proxy) || '';
   const delAfter = await db.kv.get('deleteAfterPlay', true);
+  const autoKeep = await db.kv.get('autoDownload', downloads.DEFAULT_KEEP);
   const signedIn = Boolean(await drive.token());
   main.innerHTML = `${header('Settings')}
     <form class="settings" data-act="save-settings">
@@ -367,6 +362,10 @@ async function renderSettings() {
       <label>Feed proxy URL (optional)
         <input name="proxy" value="${esc(proxy)}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
         <span class="hint">Not needed normally. Shows whose servers block apps (such as NPR's) load through a free public relay; your own proxy is faster and more private.</span>
+      </label>
+      <label>Keep newest episodes of each show downloaded (this device)
+        <select name="autoDownload">${[[0, 'Off'], [1, 'Newest 1'], [2, 'Newest 2'], [3, 'Newest 3']].map(([v, t]) => `<option value="${v}" ${v === autoKeep ? 'selected' : ''}>${t}</option>`).join('')}</select>
+        <span class="hint">Downloads them for listening without internet and removes older episode downloads. What's playing or in Up Next is never removed. Episodes run 20–100 MB each.</span>
       </label>
       <label class="check"><input type="checkbox" name="deleteAfterPlay" ${delAfter ? 'checked' : ''}> Delete downloaded episodes after they finish</label>
       <button class="pill" type="submit">Save</button>
@@ -499,6 +498,9 @@ main.addEventListener('submit', async e => {
     await db.kv.set('googleClientId', form.googleClientId.value.trim());
     await db.kv.set('proxy', form.proxy.value.trim().replace(/\/$/, ''));
     await db.kv.set('deleteAfterPlay', form.deleteAfterPlay.checked);
+    const keepBefore = await db.kv.get('autoDownload', downloads.DEFAULT_KEEP);
+    await db.kv.set('autoDownload', Number(form.autoDownload.value));
+    if (Number(form.autoDownload.value) !== keepBefore) autoDownload();
     const folders = form.musicFolders.value.trim();
     const foldersChanged = folders !== (await drive.folderSetting()).trim();
     await db.kv.set('musicFolders', folders);
@@ -549,6 +551,7 @@ document.addEventListener('click', async e => {
       const r = await pods.refreshAll();
       toast(r.failed.length ? `${r.added} new · couldn't load ${r.failed.join(', ')}` : `${r.added} new episodes`);
       render();
+      autoDownload();
       break;
     }
     case 'subscribe':
@@ -560,6 +563,7 @@ document.addEventListener('click', async e => {
           const p = await pods.subscribe(feed, { artwork: el.dataset.art });
           el.replaceWith(Object.assign(document.createElement('span'), { className: 'meta', textContent: 'Added' }));
           toast(`Added ${p.title}`);
+          autoDownload();
         } catch (err) {
           el.disabled = false;
           el.textContent = 'Add';
@@ -704,7 +708,7 @@ async function start() {
   if (fromGoogle) setTab('music'); else render();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   // Changes from other devices: redraw, except while typing in Settings.
-  sync.onRemoteChange(() => { if (!(tab === 'settings' && !stack.length)) render(); });
+  sync.onRemoteChange(() => { if (!(tab === 'settings' && !stack.length)) render(); autoDownload(); });
   sync.onStatus(() => { if (tab === 'settings' && !stack.length && document.activeElement?.tagName !== 'INPUT') render(); });
   await sync.syncNow();
   // Quietly check for new episodes at most every 30 minutes.
@@ -714,6 +718,13 @@ async function start() {
     const r = await pods.refreshAll();
     if (r.added) { toast(`${r.added} new episodes`); if (tab === 'podcasts' && !stack.length) render(); }
   }
+  autoDownload();
+}
+
+// Keep the newest episodes of each show downloaded; never touch what's playing or queued.
+function autoDownload() {
+  const s = player.getState();
+  return downloads.autoManage([s.track?.id, ...s.queue.map(t => t.id)].filter(Boolean));
 }
 
 start();
