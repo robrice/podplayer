@@ -117,8 +117,17 @@ async function renderLibrary() {
   const subs = (await db.getAll('podcasts')).sort((a, b) => a.title.localeCompare(b.title));
   const all = await db.getAll('episodes');
   const byFeed = new Map(subs.map(s => [s.feedUrl, s]));
-  const latest = all.filter(e => !e.played && byFeed.has(e.feedUrl))
-    .sort((a, b) => b.pubDate - a.pubDate).slice(0, 15);
+  // Only each show's newest episodes (same number as the download setting), newest first.
+  const keepN = await listLimit();
+  const perShow = new Map();
+  const latest = all.filter(e => byFeed.has(e.feedUrl))
+    .sort((a, b) => b.pubDate - a.pubDate)
+    .filter(e => {
+      const n = perShow.get(e.feedUrl) || 0;
+      perShow.set(e.feedUrl, n + 1);
+      return (!keepN || n < keepN) && !e.played;
+    })
+    .slice(0, 15);
 
   main.innerHTML = `
     ${header('Podcasts', { actions: '<button class="text-btn" data-act="refresh">Refresh</button>' })}
@@ -188,13 +197,18 @@ function showSearch(q) {
 const PAGE = 50;
 const shown = new Map();   // feedUrl -> how many episodes are listed
 
+// Shows list their newest episodes only, matching "Keep newest episodes" (Off = list everything).
+async function listLimit() {
+  return Number(await db.kv.get('autoDownload', downloads.DEFAULT_KEEP)) || 0;
+}
+
 function showPodcast(feedUrl) {
-  shown.set(feedUrl, PAGE);
+  shown.delete(feedUrl);
   push(async () => {
     const p = await db.get('podcasts', feedUrl);
     if (!p) return pop();
     const eps = (await db.byIndex('episodes', 'feedUrl', feedUrl)).sort((a, b) => b.pubDate - a.pubDate);
-    const limit = shown.get(feedUrl) || PAGE;
+    const limit = shown.get(feedUrl) || (await listLimit()) || PAGE;
     const savedIds = new Set(await db.blobKeys());
     main.innerHTML = `${header(p.title, { back: true })}
       <div class="show-head">
@@ -206,7 +220,7 @@ function showPodcast(feedUrl) {
         </div>
       </div>
       <ul class="list">${(await Promise.all(eps.slice(0, limit).map(e => episodeRow(e, p, false, savedIds)))).join('')}</ul>
-      ${eps.length > limit ? `<p class="more"><button class="pill subtle" data-act="more" data-feed="${esc(feedUrl)}">Show ${Math.min(PAGE, eps.length - limit)} more</button></p>` : ''}`;
+      ${eps.length > limit ? `<p class="more"><button class="pill subtle" data-act="more" data-feed="${esc(feedUrl)}">${limit < PAGE ? 'Show older episodes' : `Show ${Math.min(PAGE, eps.length - limit)} more`}</button></p>` : ''}`;
   });
 }
 
@@ -458,7 +472,7 @@ function renderFull(s) {
         </select></label>
         ${s.queue.length ? '<button class="pill subtle" data-act="next">Next ›</button>' : ''}
       </div>
-      <h3 class="section">Up Next</h3>
+      <div class="section-row"><h3 class="section">Up Next</h3>${s.queue.length ? '<button class="text-btn" data-act="clear-queue">Clear</button>' : ''}</div>
       <ul class="list">${s.queue.map(t => `
         <li class="row"><div class="row-main"><span class="meta">${esc(t.subtitle || t.folder || '')}</span><span class="title">${esc(t.title)}</span></div>
         <div class="row-actions"><button class="icon-btn" data-act="unqueue" data-id="${esc(t.id)}" aria-label="Remove">✕</button></div></li>`).join('') || '<li class="empty">Nothing queued. Use “Add to Up Next” on an episode.</li>'}</ul>`;
@@ -580,7 +594,8 @@ document.addEventListener('click', async e => {
     case 'show': showPodcast(feed); break;
     case 'more': {
       const keep = main.scrollTop;
-      shown.set(feed, (shown.get(feed) || PAGE) + PAGE);
+      const now = shown.get(feed) || (await listLimit()) || PAGE;
+      shown.set(feed, now < PAGE ? PAGE : now + PAGE);
       await render();
       main.scrollTop = keep;
       break;
@@ -677,6 +692,9 @@ document.addEventListener('click', async e => {
     case 'seek': player.seekBy(Number(el.dataset.sec)); break;
     case 'next': player.playNext(); break;
     case 'unqueue': player.dequeue(id); break;
+    case 'clear-queue':
+      if (confirm('Remove everything from Up Next?')) await player.replaceQueue([]);
+      break;
   }
 });
 
