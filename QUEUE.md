@@ -3,6 +3,11 @@
 Issues found while building that need Rob, a real iPhone, or a later decision.
 
 ## Needs Rob
+- [ ] **Turn on the feed mirror.** The laptop's GitHub login can't publish workflow files. Rob runs `gh auth refresh -h github.com -s workflow` once (it shows a code to enter at github.com/login/device). Then Claude:
+  - Pushes `.github/workflows/pages.yml`, which is written and in the working tree, not committed.
+  - Switches Pages to the Actions build: `gh api -X PUT repos/robrice/podplayer/pages -f build_type=workflow`.
+
+  Until then, NPR, Audioboom, NBC and Acast shows fall back to the unreliable public relay.
 - [ ] **Drive music is untested end to end.** It needs the Google Cloud client ID (README, "One-time setup for Drive music"). After that, test sign-in on the iPhone home-screen app: the redirect leaves the app and returns, then list the folders and play the Gulag Archipelago parts in order.
 - [ ] **Real-iPhone checks** (headless Chrome can't test these):
   - Lock-screen controls and artwork.
