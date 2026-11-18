@@ -79,6 +79,8 @@ select { width: auto; padding: 6px 10px; }
 .list { list-style: none; margin: 0; padding: 0; }
 .row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .row.played .title { color: var(--muted); }
+.mark-btn { color: var(--muted); }
+.mark-btn.on { color: var(--accent); }
 .row-main { flex: 1; min-width: 0; text-align: left; display: flex; flex-direction: column; gap: 2px; }
 .row-actions { display: flex; align-items: center; gap: 6px; }
 .title { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

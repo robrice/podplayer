@@ -20,6 +20,7 @@ const ICON = {
   fwd30: '<svg viewBox="0 0 24 24"><path d="M12 5V1l5 5-5 5V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z"/><text x="12" y="16.5" font-size="6.5" text-anchor="middle">30</text></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M12 3v11m0 0l-4-4m4 4l4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   done: '<svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  played: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 12.3l3 3 5-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   queue: '<svg viewBox="0 0 24 24"><path d="M4 6h12M4 12h12M4 18h8M18 15v6m-3-3h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   trash: '<svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3m-7 0l1 13h8l1-13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
 };
@@ -165,6 +166,7 @@ async function episodeRow(ep, podcast, showPodcast = false, savedIds = null) {
       <span class="meta">${esc(left)}${ep.played ? ' · Played' : ''}${saved ? ' · Downloaded' : ''}</span>
     </button>
     <div class="row-actions">
+      <button class="icon-btn mark-btn ${ep.played ? 'on' : ''}" data-act="mark" data-id="${esc(ep.id)}" aria-label="${ep.played ? 'Mark unplayed' : 'Mark played'}">${ICON.played}</button>
       <button class="icon-btn" data-act="dl" data-id="${esc(ep.id)}" aria-label="${saved ? 'Downloaded' : 'Download'}">
         ${prog !== undefined ? `<span class="pct">${Math.round(prog * 100)}%</span>` : saved ? ICON.done : ICON.down}
       </button>
@@ -615,6 +617,29 @@ document.addEventListener('click', async e => {
       await pods.setPlayed(id, !ep.played);
       closeSheet();
       render();
+      break;
+    }
+    case 'mark': {
+      // Update the row in place (no redraw, so the list doesn't jump). On the Podcasts home list,
+      // a played episode drops off; on a show's page it stays, dimmed, so it can be un-marked.
+      const ep = await db.get('episodes', id);
+      const played = !ep.played;
+      await pods.setPlayed(id, played);
+      const li = el.closest('li.row');
+      if (played && tab === 'podcasts' && !stack.length) {
+        const list = li.parentElement;
+        li.remove();
+        if (!list.children.length) list.innerHTML = '<li class="empty">You are all caught up.</li>';
+        toast('Marked played');
+        break;
+      }
+      li.classList.toggle('played', played);
+      el.classList.toggle('on', played);
+      el.setAttribute('aria-label', played ? 'Mark unplayed' : 'Mark played');
+      const metas = li.querySelectorAll('.row-main .meta');
+      const last = metas[metas.length - 1];
+      if (last) last.textContent = played ? (last.textContent + ' · Played') : last.textContent.replace(' · Played', '');
+      toast(played ? 'Marked played' : 'Marked unplayed');
       break;
     }
     case 'dl': {
