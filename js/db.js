@@ -61,6 +61,23 @@ export async function blobKeys() {
   return wrap((await store('blobs')).getAllKeys());
 }
 
+// All kv entries whose key starts with prefix -> [[key, value], ...]
+export async function kvEntries(prefix) {
+  const s = await store('kv');
+  const range = IDBKeyRange.bound(prefix, `${prefix}￿`);
+  return new Promise((resolve, reject) => {
+    const out = [];
+    const req = s.openCursor(range);
+    req.onsuccess = () => {
+      const cur = req.result;
+      if (!cur) return resolve(out);
+      out.push([cur.key, cur.value]);
+      cur.continue();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
 // Settings and small state
 export const kv = {
   get: (k, dflt = null) => get('kv', k).then(v => (v === undefined ? dflt : v)),

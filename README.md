@@ -15,6 +15,16 @@ Live at: https://robrice.github.io/podplayer/
 - **Downloads:** keep episodes or Drive tracks on the phone for listening without internet. Episodes are deleted after they finish (can be turned off in Settings).
 - **Music from Google Drive:** every Drive folder that has audio shows up. "Play" on a folder resumes at the first unfinished track, so a multi-part audiobook picks up where you left off.
 
+## Sync between laptop and phone (free)
+Shows, played marks, playback positions, Up Next, the current episode, and the Google/proxy settings sync between every device where sync is turned on. Downloads stay on each device.
+
+Sync is stored in one **private (secret) GitHub gist** in your account (`podplayer-sync.json`). Each device uses its own GitHub key. On **each** device (laptop browser, iPhone app):
+1. Podplayer → **Settings** → **Sync between devices** → **Create a GitHub key**. GitHub opens a "New personal access token (classic)" page with only the **gist** box checked.
+2. Set **Expiration** to **No expiration**, tap **Generate token**, and copy the `ghp_…` key.
+3. Paste it into Podplayer and tap **Connect**.
+
+The app syncs when it opens, a few seconds after each change, when you switch back to it, and every 2 minutes while it's on screen. If the same thing changed on two devices, the newer change wins. A key can be revoked anytime at https://github.com/settings/tokens; it can only read and write gists.
+
 ## One-time setup for Drive music (free)
 1. Go to https://console.cloud.google.com/ and sign in with your Google account.
 2. Create a project (any name, e.g. "Podplayer").

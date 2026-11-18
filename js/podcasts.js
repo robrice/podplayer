@@ -1,6 +1,7 @@
 // Podcast search (Apple's free directory), RSS parsing, and refreshing subscriptions.
 import * as db from './db.js';
 import { fetchFeedText } from './net.js';
+import { touch } from './events.js';
 
 const ITUNES_NS = 'http://www.itunes.com/dtds/podcast-1.0.dtd';
 const CONTENT_NS = 'http://purl.org/rss/1.0/modules/content/';
@@ -92,30 +93,50 @@ export async function loadFeed(feedUrl, hint) {
 }
 
 // Save new episodes but keep what we already know (played flag) about old ones.
+// Played marks synced from another device ('marks') win over the local flag.
 async function merge(podcast, episodes) {
   const known = new Map((await db.byIndex('episodes', 'feedUrl', podcast.feedUrl)).map(e => [e.id, e]));
-  const merged = episodes.map(e => ({ ...e, played: known.get(e.id)?.played || false }));
+  const marks = await db.kv.get('marks', {});
+  const merged = episodes.map(e => ({ ...e, played: marks[e.id] ? marks[e.id].p : (known.get(e.id)?.played || false) }));
   await db.putMany('episodes', merged);
   const existing = await db.get('podcasts', podcast.feedUrl);
   await db.put('podcasts', { ...existing, ...podcast, refreshed: Date.now() });
   return merged.filter(e => !known.has(e.id)).length;
 }
 
-export async function subscribe(feedUrl, hint = {}) {
-  const { podcast, episodes } = await loadFeed(feedUrl);
+// `fromSync` = change came from another device: keep its timestamp, don't echo it back.
+export async function subscribe(feedUrl, hint = {}, { fromSync = false } = {}) {
+  const { podcast, episodes } = await loadFeed(feedUrl, hint.route);
   podcast.artwork = podcast.artwork || hint.artwork || '';
-  podcast.added = Date.now();
+  podcast.added = hint.added || Date.now();
+  podcast.t = fromSync ? hint.t : Date.now();
   await merge(podcast, episodes);
+  const tomb = await db.kv.get('tombstones', {});
+  if (tomb[feedUrl]) { delete tomb[feedUrl]; await db.kv.set('tombstones', tomb); }
+  if (!fromSync) touch();
   return podcast;
 }
 
-export async function unsubscribe(feedUrl) {
+export async function unsubscribe(feedUrl, { fromSync = false, t = Date.now() } = {}) {
   const eps = await db.byIndex('episodes', 'feedUrl', feedUrl);
   for (const e of eps) {
     await db.del('episodes', e.id);
     await db.del('blobs', e.id);
   }
   await db.del('podcasts', feedUrl);
+  const tomb = await db.kv.get('tombstones', {});
+  tomb[feedUrl] = t;
+  await db.kv.set('tombstones', tomb);
+  if (!fromSync) touch();
+}
+
+export async function setPlayed(id, played, { fromSync = false, t = Date.now() } = {}) {
+  const ep = await db.get('episodes', id);
+  if (ep && ep.played !== played) await db.put('episodes', { ...ep, played });
+  const marks = await db.kv.get('marks', {});
+  marks[id] = { p: played, t };
+  await db.kv.set('marks', marks);
+  if (!fromSync) touch();
 }
 
 // Refresh every subscription; returns { added, failed: [titles] }

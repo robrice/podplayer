@@ -6,6 +6,8 @@ import * as downloads from './downloads.js';
 import * as player from './player.js';
 import { CONFIG } from './config.js';
 import { mirrorRequestUrl } from './net.js';
+import * as sync from './sync.js';
+import { touch } from './events.js';
 
 const $ = sel => document.querySelector(sel);
 const main = $('#main');
@@ -365,7 +367,42 @@ async function renderSettings() {
       <label class="pill subtle file-pill">Import OPML<input type="file" accept=".opml,.xml,text/xml" data-act="opml-import" hidden></label>
       <button class="pill subtle" data-act="opml-export">Export OPML</button>
     </div>
-    <p class="hint pad">Everything is stored on this phone only. Add to Home Screen from Safari's Share menu to use it like an app.</p>`;
+    ${await syncSection()}
+    <p class="hint pad">Your data lives on this device${(await db.kv.get('syncToken', '')) ? ' and in your private sync gist' : ''}. On iPhone, use Share → Add to Home Screen to run it like an app.</p>`;
+}
+
+function ago(ms) {
+  const s = Math.round((Date.now() - ms) / 1000);
+  return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
+}
+
+async function syncSection() {
+  const connected = Boolean(await db.kv.get('syncToken', ''));
+  const st = sync.getStatus();
+  if (connected) {
+    const who = await db.kv.get('syncUser', '');
+    const line = st.state === 'error' ? `<span class="error">Last sync failed: ${esc(st.error)}</span>`
+      : st.state === 'syncing' ? 'Syncing…'
+      : st.at ? `Synced ${ago(st.at)}` : 'Waiting to sync';
+    return `<div class="settings sync-box">
+      <p class="label">Sync between devices</p>
+      <p class="hint">On, through GitHub account <b>${esc(who)}</b>. Shows, played marks, positions, Up Next and settings stay the same on every device where sync is on. ${line}.</p>
+      <div class="sheet-actions">
+        <button class="pill subtle" data-act="sync-now">Sync now</button>
+        <button class="pill subtle" data-act="sync-off">Turn off on this device</button>
+      </div>
+    </div>`;
+  }
+  return `<form class="settings sync-box" data-act="sync-connect">
+      <p class="label">Sync between devices</p>
+      <p class="hint">Keep your shows, played marks, positions and Up Next the same on your laptop and phone. Do this once on each device:</p>
+      <ol class="steps hint">
+        <li><a href="${sync.tokenUrl}" target="_blank" rel="noopener">Create a GitHub key</a> (sign in if asked). Set <b>Expiration</b> to <b>No expiration</b>, leave only <b>gist</b> checked, tap <b>Generate token</b>, and copy it.</li>
+        <li>Paste it here and tap Connect.</li>
+      </ol>
+      <input name="syncToken" placeholder="ghp_…" autocomplete="off" spellcheck="false" required>
+      <button class="pill" type="submit">Connect</button>
+    </form>`;
 }
 
 // ---------- player UI ----------
@@ -451,7 +488,22 @@ main.addEventListener('submit', async e => {
     await db.kv.set('googleClientId', form.googleClientId.value.trim());
     await db.kv.set('proxy', form.proxy.value.trim().replace(/\/$/, ''));
     await db.kv.set('deleteAfterPlay', form.deleteAfterPlay.checked);
+    await sync.settingsChanged(['googleClientId', 'proxy']);
+    touch();
     toast('Saved');
+  } else if (form.dataset.act === 'sync-connect') {
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = 'Connecting…';
+    try {
+      const who = await sync.connect(form.syncToken.value);
+      toast(`Sync on (GitHub: ${who})`);
+      render();
+    } catch (err) {
+      toast(`Couldn't connect: ${err.message}`);
+      btn.disabled = false;
+      btn.textContent = 'Connect';
+    }
   }
 });
 
@@ -526,7 +578,7 @@ document.addEventListener('click', async e => {
     }
     case 'toggle-played': {
       const ep = await db.get('episodes', id);
-      await db.put('episodes', { ...ep, played: !ep.played });
+      await pods.setPlayed(id, !ep.played);
       closeSheet();
       render();
       break;
@@ -579,6 +631,10 @@ document.addEventListener('click', async e => {
       break;
     }
     case 'rm-saved': await downloads.remove(id); break;
+    case 'sync-now': await sync.syncNow(); render(); break;
+    case 'sync-off':
+      if (confirm('Turn off sync on this device? Your data stays here and in the gist.')) { await sync.disconnect(); render(); }
+      break;
     case 'opml-export': {
       const blob = new Blob([pods.buildOpml(await db.getAll('podcasts'))], { type: 'text/xml' });
       const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'podcasts.opml' });
@@ -621,6 +677,10 @@ async function start() {
   await player.restore();
   if (fromGoogle) setTab('music'); else render();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Changes from other devices: redraw, except while typing in Settings.
+  sync.onRemoteChange(() => { if (!(tab === 'settings' && !stack.length)) render(); });
+  sync.onStatus(() => { if (tab === 'settings' && !stack.length && document.activeElement?.tagName !== 'INPUT') render(); });
+  await sync.syncNow();
   // Quietly check for new episodes at most every 30 minutes.
   const last = await db.kv.get('lastRefresh', 0);
   if ((await db.getAll('podcasts')).length && Date.now() - last > 30 * 60000) {

@@ -1,8 +1,8 @@
 // App-shell cache so the app opens without internet. Audio is stored separately (IndexedDB).
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
-  'js/app.js', 'js/db.js', 'js/config.js', 'js/podcasts.js', 'js/drive.js', 'js/downloads.js', 'js/player.js', 'js/net.js',
+  'js/app.js', 'js/db.js', 'js/config.js', 'js/podcasts.js', 'js/drive.js', 'js/downloads.js', 'js/player.js', 'js/net.js', 'js/events.js', 'js/sync.js',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 

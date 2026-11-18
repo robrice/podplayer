@@ -163,6 +163,10 @@ select { width: auto; padding: 6px 10px; }
 }
 .sheet-card h2 { font-size: 20px; margin: 6px 0 12px; }
 .sheet-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.sync-box { background: var(--surface); border-radius: 14px; padding: 14px; }
+.sync-box .label { margin-top: 0; }
+.sync-box .steps, .sync-box p { margin: 0; }
+.sync-box a { color: var(--accent); }
 .steps { padding-left: 20px; }
 .steps li { margin: 6px 0; }
 a.pill { text-decoration: none; }

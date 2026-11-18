@@ -11,7 +11,10 @@ Issues found while building that need Rob, a real iPhone, or a later decision.
   - Moving from one Drive track to the next while locked.
   - Resume after a force-quit.
 
+- [ ] **Sync with a real GitHub key.** The sync was tested end to end against a local stand-in for the GitHub gist API: two devices, adding and removing shows, played marks, positions, Up Next and settings, with no uploads when nothing changed. It was not tested against real GitHub, because Claude isn't allowed to use Rob's GitHub login in a test browser. The first real check is Rob connecting the laptop browser and then the iPhone app (README, "Sync between laptop and phone").
+
 ## Known limits / ideas
+- [ ] Sync is newest-wins per item. Two devices playing at the same time just leave the later position.
 - [x] **Feeds that block browsers** (NPR, Audioboom redirects): solved by the GitHub Actions feed mirror (README). The public relay remains only as a last resort.
 - [ ] **Mirror requests need a GitHub login on the phone** the first time Rob taps "Request mirror".
 - [ ] **Downloads for shows whose audio host blocks browsers** still fail, though they stream fine. In the top-100 test (Nov 17), 8 of 81 loadable shows were affected: SmartLess, Conan O'Brien Needs A Friend, Mel Robbins, BBC Global News, WSJ What's News, Small Town Murder, The Viall Files, Freakonomics. Ideas:

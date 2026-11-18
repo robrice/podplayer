@@ -2,6 +2,8 @@
 import * as db from './db.js';
 import * as downloads from './downloads.js';
 import { fetchBlob } from './drive.js';
+import { setPlayed } from './podcasts.js';
+import { touch } from './events.js';
 
 const audio = new Audio();
 audio.preload = 'auto';
@@ -47,20 +49,61 @@ export function unlock() {
 let loadedId = null;   // track whose audio is actually in the element
 
 async function savePosition(force = false) {
-  if (!state.track || !Number.isFinite(audio.currentTime)) return;
+  if (!state.track || loadedId !== state.track.id || !Number.isFinite(audio.currentTime)) return;
   const now = Date.now();
   if (!force && now - lastSave < 5000) return;
   lastSave = now;
-  await db.put('kv', { t: audio.currentTime, d: audio.duration || 0, at: now }, `pos:${state.track.id}`);
+  const key = `pos:${state.track.id}`;
+  const prev = await db.kv.get(key);
+  // Unmoved position: keep the old timestamp so other devices don't treat it as news.
+  if (prev && !prev.done && Math.abs(prev.t - audio.currentTime) < 1) return;
+  if (prev?.done && audio.currentTime < 1) return;
+  await db.put('kv', { t: audio.currentTime, d: audio.duration || 0, at: now }, key);
+  if (force) touch();
 }
 
 export async function position(id) {
   return db.kv.get(`pos:${id}`);
 }
 
-async function persistQueue() {
+// Queue + current track share one timestamp for syncing between devices.
+async function persistQueue({ fromSync = false, t = Date.now() } = {}) {
   await db.kv.set('queue', state.queue);
   await db.kv.set('current', state.track);
+  await db.kv.set('queueAt', t);
+  if (!fromSync) touch();
+}
+
+export const isPlaying = () => !audio.paused && !audio.ended;
+
+// Another device changed the queue / current track. Never interrupt what's playing here.
+export async function applyRemote({ queue, current, t }) {
+  state.queue = queue || [];
+  if (!isPlaying() && current && current.id !== state.track?.id) {
+    state.track = current;
+    if (current.source !== 'drive' || await downloads.isSaved(current.id)) {
+      try {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        const src = await sourceFor(current);
+        objectUrl = src.startsWith('blob:') ? src : null;
+        audio.src = src;
+        loadedId = current.id;
+        setMediaSession(current);
+      } catch { /* loads on play */ }
+    }
+  }
+  await persistQueue({ fromSync: true, t });
+  await seekToSaved();
+  notify();
+}
+
+// A newer position for the loaded (paused) track arrived from another device.
+export async function seekToSaved() {
+  if (isPlaying() || !state.track || loadedId !== state.track.id) return;
+  const pos = await position(state.track.id);
+  if (!pos || pos.done) return;
+  const go = () => { if (Math.abs(audio.currentTime - pos.t) > 3) audio.currentTime = pos.t; };
+  if (audio.readyState >= 1) go(); else audio.addEventListener('loadedmetadata', go, { once: true });
 }
 
 async function sourceFor(track) {
@@ -71,7 +114,7 @@ async function sourceFor(track) {
 }
 
 // Load a track and (optionally) start playing at its saved spot.
-export async function load(track, { autoplay = true } = {}) {
+export async function load(track, { autoplay = true, restoring = false } = {}) {
   await savePosition(true);
   state.track = track;
   state.error = '';
@@ -90,7 +133,9 @@ export async function load(track, { autoplay = true } = {}) {
       audio.addEventListener('loadedmetadata', () => { audio.currentTime = resumeAt; }, { once: true });
     }
     setMediaSession(track);
-    await persistQueue();
+    // Reopening the app isn't a new choice; keep the saved timestamp.
+    if (restoring) await persistQueue({ fromSync: true, t: await db.kv.get('queueAt', 0) });
+    else await persistQueue();
     if (autoplay) await audio.play();
   } catch (err) {
     state.error = err.needsSignIn ? 'Sign in to Google Drive to play this.' : (err.message || 'Could not play');
@@ -157,10 +202,11 @@ export async function playNext() {
 async function finished() {
   const t = state.track;
   if (!t) return;
+  loadedId = null;   // stop position saves from overwriting the "finished" record below
   await db.put('kv', { t: 0, d: audio.duration || 0, at: Date.now(), done: true }, `pos:${t.id}`);
+  touch();
   if (t.source !== 'drive') {
-    const ep = await db.get('episodes', t.id);
-    if (ep) await db.put('episodes', { ...ep, played: true });
+    await setPlayed(t.id, true);
     if (await db.kv.get('deleteAfterPlay', true)) await downloads.remove(t.id);
   }
   if (state.sleepAt === -1) { state.sleepAt = 0; notify(); return; }
@@ -225,7 +271,7 @@ export async function restore() {
     if (current.source === 'drive' && !(await downloads.isSaved(current.id))) {
       state.track = current;
     } else {
-      await load(current, { autoplay: false });
+      await load(current, { autoplay: false, restoring: true });
     }
   }
   notify();
