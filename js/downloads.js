@@ -6,7 +6,8 @@ import { trackFor } from './podcasts.js';
 
 const listeners = new Set();
 export const onChange = fn => listeners.add(fn);
-const notify = () => listeners.forEach(fn => fn());
+// detail: { id, progress } while downloading; { id } when a download starts, ends or is removed.
+const notify = (detail = {}) => listeners.forEach(fn => fn(detail));
 
 const inFlight = new Map();   // id -> progress 0..1
 
@@ -19,7 +20,7 @@ export async function isSaved(id) {
 export async function save(track) {
   if (inFlight.has(track.id)) return;
   inFlight.set(track.id, 0);
-  notify();
+  notify({ id: track.id });
   try {
     let blob;
     if (track.source === 'drive') {
@@ -47,7 +48,7 @@ export async function save(track) {
     if (navigator.storage?.persist) navigator.storage.persist();
   } finally {
     inFlight.delete(track.id);
-    notify();
+    notify({ id: track.id });
   }
 }
 
@@ -63,14 +64,14 @@ async function readWithProgress(res, track) {
     chunks.push(value);
     got += value.length;
     inFlight.set(track.id, Math.min(got / total, 1));
-    notify();
+    notify({ id: track.id, progress: inFlight.get(track.id) });
   }
   return new Blob(chunks, { type: track.type || res.headers.get('content-type') || 'audio/mpeg' });
 }
 
 export async function remove(id) {
   await db.del('blobs', id);
-  notify();
+  notify({ id });
 }
 
 export async function list() {

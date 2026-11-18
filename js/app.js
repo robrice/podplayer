@@ -710,10 +710,24 @@ $('#full').addEventListener('input', e => {
 });
 $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
 
-// Re-render list pages when downloads progress (throttled).
+// Downloads change: update that episode's button in place, since redrawing the page makes the
+// artwork blink. Only the Downloads tab, whose list itself changes, is redrawn (throttled).
 let pending = false;
-downloads.onChange(() => {
-  if (pending || (tab === 'settings' && !stack.length)) return;
+downloads.onChange(async ({ id, progress }) => {
+  const buttons = () => document.querySelectorAll(`[data-act^="dl"][data-id="${CSS.escape(id || '')}"]`);
+  if (progress !== undefined) {
+    buttons().forEach(b => { b.innerHTML = `<span class="pct">${Math.round(progress * 100)}%</span>`; });
+    return;
+  }
+  if (id) {
+    const saved = await downloads.isSaved(id);
+    const busy = downloads.progress(id) !== undefined;
+    buttons().forEach(b => {
+      b.innerHTML = busy ? '<span class="pct">0%</span>' : saved ? ICON.done : ICON.down;
+      b.setAttribute('aria-label', saved ? 'Downloaded' : 'Download');
+    });
+  }
+  if (tab !== 'downloads' || stack.length || pending) return;
   pending = true;
   setTimeout(() => { pending = false; render(); }, 400);
 });
