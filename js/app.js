@@ -262,7 +262,7 @@ function closeSheet() {
 // ---------- Music tab (Google Drive) ----------
 async function renderMusic() {
   const signedIn = Boolean(await drive.token());
-  const hasClient = Boolean(await db.kv.get('googleClientId', CONFIG.googleClientId));
+  const hasClient = Boolean((await db.kv.get('googleClientId', '')) || CONFIG.googleClientId);
   let folders = await drive.cachedFolders();
   main.innerHTML = `${header('Music', { actions: signedIn ? '<button class="text-btn" data-act="drive-scan">Rescan</button>' : '' })}
     ${!hasClient ? '<div class="empty-state"><p>To play music from Google Drive, add your Google client ID in Settings.</p></div>' : ''}
@@ -350,7 +350,7 @@ async function renderDownloads() {
 
 // ---------- Settings tab ----------
 async function renderSettings() {
-  const clientId = await db.kv.get('googleClientId', CONFIG.googleClientId) || '';
+  const clientId = (await db.kv.get('googleClientId', '')) || CONFIG.googleClientId;
   const proxy = await db.kv.get('proxy', CONFIG.proxy) || '';
   const delAfter = await db.kv.get('deleteAfterPlay', true);
   const signedIn = Boolean(await drive.token());

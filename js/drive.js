@@ -6,7 +6,7 @@ const SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 const API = 'https://www.googleapis.com/drive/v3';
 
 async function clientId() {
-  return (await db.kv.get('googleClientId', CONFIG.googleClientId)) || '';
+  return (await db.kv.get('googleClientId', '')) || CONFIG.googleClientId;
 }
 
 function redirectUri() {
