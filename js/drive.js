@@ -66,20 +66,58 @@ async function api(path, params = {}) {
 
 const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
-// All audio files in Drive, grouped by folder: [{ id, name, files: [...] }]
-export async function audioFolders() {
-  const files = [];
+const FOLDER = 'application/vnd.google-apps.folder';
+
+// The "Music folders" setting: Drive folder links or IDs, one per line. Blank = whole Drive.
+export async function folderSetting() {
+  const v = await db.kv.get('musicFolders');
+  return v === null ? CONFIG.musicFolders.join('\n') : v;
+}
+
+export function folderIds(text) {
+  return String(text || '').split(/[\s,]+/).map(s => {
+    const m = s.match(/folders\/([A-Za-z0-9_-]{10,})/) || s.match(/[?&]id=([A-Za-z0-9_-]{10,})/) || s.match(/^([A-Za-z0-9_-]{20,})$/);
+    return m ? m[1] : null;
+  }).filter(Boolean);
+}
+
+async function listAll(q, fields) {
+  const out = [];
   let pageToken;
   do {
-    const data = await api('files', {
-      q: "mimeType contains 'audio/' and trashed = false",
-      fields: 'nextPageToken, files(id, name, mimeType, size, parents)',
-      pageSize: '1000',
-      ...(pageToken ? { pageToken } : {}),
-    });
-    files.push(...data.files);
+    const data = await api('files', { q, fields: `nextPageToken, files(${fields})`, pageSize: '1000', ...(pageToken ? { pageToken } : {}) });
+    out.push(...data.files);
     pageToken = data.nextPageToken;
   } while (pageToken);
+  return out;
+}
+
+// Audio inside the chosen folders and their subfolders (3 levels down).
+async function filesInFolders(roots) {
+  const files = [];
+  const names = new Map();
+  let level = roots;
+  for (let depth = 0; depth < 4 && level.length; depth++) {
+    const next = [];
+    for (const id of level) {
+      const kids = await listAll(`'${id}' in parents and trashed = false and (mimeType contains 'audio/' or mimeType = '${FOLDER}')`, 'id, name, mimeType, size, parents');
+      for (const k of kids) {
+        if (k.mimeType === FOLDER) { names.set(k.id, k.name); next.push(k.id); }
+        else files.push(k);
+      }
+    }
+    level = next;
+  }
+  return { files, names };
+}
+
+// Audio files grouped by folder: [{ id, name, files: [...] }]
+export async function audioFolders() {
+  const roots = folderIds(await folderSetting());
+  let files;
+  let names = new Map();
+  if (roots.length) ({ files, names } = await filesInFolders(roots));
+  else files = await listAll("mimeType contains 'audio/' and trashed = false", 'id, name, mimeType, size, parents');
 
   const groups = new Map();
   for (const f of files) {
@@ -97,8 +135,8 @@ export async function audioFolders() {
   }
 
   const folders = await Promise.all([...groups].map(async ([id, list]) => {
-    let name = 'My Drive';
-    if (id !== 'root') {
+    let name = names.get(id) || 'My Drive';
+    if (id !== 'root' && !names.has(id)) {
       try { name = (await api(`files/${id}`, { fields: 'name' })).name; } catch { name = 'Folder'; }
     }
     list.sort((a, b) => byName.compare(a.name, b.name));
@@ -107,10 +145,13 @@ export async function audioFolders() {
   }));
   folders.sort((a, b) => byName.compare(a.name, b.name));
   await db.kv.set('driveFolders', folders);   // so the list shows without signing in
+  await db.kv.set('driveFoldersFor', await folderSetting());
   return folders;
 }
 
+// Last scan, unless the folder setting has changed since (then it needs a rescan).
 export async function cachedFolders() {
+  if ((await db.kv.get('driveFoldersFor', '')) !== (await folderSetting())) return [];
   return db.kv.get('driveFolders', []);
 }
 

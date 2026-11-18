@@ -10,7 +10,7 @@ const API = 'https://api.github.com';
 const FILE = 'podplayer-sync.json';
 const DESCRIPTION = 'Podplayer sync (private, managed by the Podplayer app)';
 const MAX_POSITIONS = 500;
-const SETTINGS = ['googleClientId', 'proxy'];
+const SETTINGS = ['googleClientId', 'proxy', 'musicFolders'];
 
 const listeners = new Set();
 export const onStatus = fn => listeners.add(fn);

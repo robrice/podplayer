@@ -62,11 +62,12 @@ img { display: block; }
 .bar .back + h1 { font-size: 20px; }
 .text-btn { color: var(--accent); font-weight: 600; padding: 8px 4px; }
 
-.search input, .settings input:not([type=checkbox]), select {
+.search input, .settings input:not([type=checkbox]), .settings textarea, select {
   width: 100%; font: inherit; color: var(--text); background: var(--surface-2);
   border: 1px solid transparent; border-radius: 12px; padding: 10px 12px;
 }
-.search input:focus, .settings input:focus { outline: none; border-color: var(--accent); }
+.search input:focus, .settings input:focus, .settings textarea:focus { outline: none; border-color: var(--accent); }
+.settings textarea { resize: vertical; font-size: 14px; }
 select { width: auto; padding: 6px 10px; }
 
 .section { font-size: 18px; margin: 22px 0 10px; }

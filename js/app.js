@@ -267,6 +267,7 @@ async function renderMusic() {
   main.innerHTML = `${header('Music', { actions: signedIn ? '<button class="text-btn" data-act="drive-scan">Rescan</button>' : '' })}
     ${!hasClient ? '<div class="empty-state"><p>To play music from Google Drive, add your Google client ID in Settings.</p></div>' : ''}
     ${hasClient && !signedIn ? `<div class="banner"><span>Sign in to stream from Google Drive. Downloaded tracks play without signing in.</span><button class="pill" data-act="drive-signin">Sign in</button></div>` : ''}
+    ${drive.folderIds(await drive.folderSetting()).length ? '<p class="hint pad">Showing only your music folders. Change them in Settings → Music folders.</p>' : ''}
     <ul class="list">${folders.map(f => `
       <li class="row">
         <button class="row-main" data-act="folder" data-folder="${esc(f.id)}">
@@ -358,6 +359,10 @@ async function renderSettings() {
     <form class="settings" data-act="save-settings">
       <label>Google client ID (for Drive music)
         <input name="googleClientId" value="${esc(clientId)}" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+      </label>
+      <label>Music folders (Drive folder links, one per line)
+        <textarea name="musicFolders" rows="3" placeholder="https://drive.google.com/drive/folders/…" autocomplete="off" spellcheck="false">${esc(await drive.folderSetting())}</textarea>
+        <span class="hint">The Music tab shows only these folders and their subfolders. Leave blank to show all audio in your Drive.</span>
       </label>
       <label>Feed proxy URL (optional)
         <input name="proxy" value="${esc(proxy)}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
@@ -494,9 +499,13 @@ main.addEventListener('submit', async e => {
     await db.kv.set('googleClientId', form.googleClientId.value.trim());
     await db.kv.set('proxy', form.proxy.value.trim().replace(/\/$/, ''));
     await db.kv.set('deleteAfterPlay', form.deleteAfterPlay.checked);
-    await sync.settingsChanged(['googleClientId', 'proxy']);
+    const folders = form.musicFolders.value.trim();
+    const foldersChanged = folders !== (await drive.folderSetting()).trim();
+    await db.kv.set('musicFolders', folders);
+    await sync.settingsChanged(['googleClientId', 'proxy', 'musicFolders']);
+    if (foldersChanged) { await db.kv.set('driveFolders', []); renderMusic.scanned = false; }
     touch();
-    toast('Saved');
+    toast(foldersChanged ? 'Saved. The Music tab will rescan.' : 'Saved');
   } else if (form.dataset.act === 'sync-connect') {
     const btn = form.querySelector('button');
     btn.disabled = true;

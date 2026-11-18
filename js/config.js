@@ -5,6 +5,8 @@ export const CONFIG = {
   // Optional proxy for podcast feeds that block browsers: the /exec URL of apps-script/FeedProxy.gs.
   // The app calls `${proxy}?url=<encoded feed url>`.
   proxy: '',
+  // Drive folders the Music tab shows (with their subfolders). Empty = all audio in Drive.
+  musicFolders: ['https://drive.google.com/drive/folders/1ujyU2P7vssvobZ1MDx2pWLkHiwXqHVri'],   // "m4a music"
   // GitHub repo whose Actions job mirrors blocked feeds into this site (tools/mirror.py).
   repo: 'robrice/podplayer',
 };
