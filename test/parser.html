@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Parser test</title>
+<pre id="out">running</pre>
+<script type="module">
+  import { search, loadFeed, parseDuration, parseOpml, buildOpml } from '../js/podcasts.js';
+  const out = document.getElementById('out');
+  const results = { checks: [], feeds: [] };
+  const check = (name, ok, detail = '') => results.checks.push({ name, ok, detail });
+
+  check('duration h:m:s', parseDuration('1:02:03') === 3723);
+  check('duration m:s', parseDuration('62:03') === 3723);
+  check('duration seconds', parseDuration('3723') === 3723);
+  const opml = buildOpml([{ title: 'A & B', feedUrl: 'https://x.test/feed?a=1&b=2' }]);
+  check('opml round trip', parseOpml(opml)[0] === 'https://x.test/feed?a=1&b=2');
+
+  const terms = ['hidden brain', 'the daily', 'planet money', 'freakonomics', 'aviation news talk'];
+  for (const term of terms) {
+    try {
+      const hits = await search(term);
+      const hit = hits[0];
+      const { podcast, episodes } = await loadFeed(hit.feedUrl);
+      const e = episodes[0];
+      results.feeds.push({
+        term, feed: hit.feedUrl, title: podcast.title, art: Boolean(podcast.artwork),
+        episodes: episodes.length, first: e?.title, audio: e?.audioUrl?.slice(0, 60), duration: e?.duration,
+        date: e ? new Date(e.pubDate).toISOString().slice(0, 10) : null,
+        uniqueIds: new Set(episodes.map(x => x.id)).size === episodes.length,
+      });
+    } catch (err) {
+      results.feeds.push({ term, error: String(err) });
+    }
+  }
+  out.textContent = 'DONE ' + JSON.stringify(results, null, 1);
+</script>
