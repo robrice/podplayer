@@ -120,5 +120,14 @@ export async function fetchBlob(driveId) {
   if (!t) throw Object.assign(new Error('Sign in to Google Drive'), { needsSignIn: true });
   const res = await fetch(`${API}/files/${driveId}?alt=media`, { headers: { Authorization: `Bearer ${t}` } });
   if (!res.ok) throw new Error(`Drive download failed (${res.status})`);
-  return res.blob();
+  const blob = await res.blob();
+  return new Blob([blob], { type: playableType(blob.type) });
+}
+
+// Drive reports .m4a as audio/x-m4a, which iPhone Safari may refuse for blob audio.
+function playableType(type) {
+  const t = (type || '').toLowerCase();
+  if (/m4a|mp4|aac/.test(t)) return 'audio/mp4';
+  if (/mpeg|mp3/.test(t)) return 'audio/mpeg';
+  return t || 'audio/mpeg';
 }

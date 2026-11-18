@@ -314,7 +314,13 @@ function showFolder(folderId) {
         </div>
       </li>`;
     }));
-    main.innerHTML = `${header(folder.name, { back: true, actions: `<button class="text-btn" data-act="dl-folder" data-folder="${esc(folderId)}">Download all</button>` })}
+    main.innerHTML = `${header(folder.name, { back: true })}
+      <div class="sheet-actions">
+        <button class="pill" data-act="play-folder" data-folder="${esc(folderId)}">Play</button>
+        <button class="pill subtle" data-act="shuffle-folder" data-folder="${esc(folderId)}">Shuffle</button>
+        <button class="pill subtle" data-act="dl-folder" data-folder="${esc(folderId)}">Download all</button>
+      </div>
+      <p class="meta pad">${folder.files.length} tracks · ${fmtMB(folder.files.reduce((n, t) => n + t.size, 0))}</p>
       <ul class="list">${rows.join('')}</ul>`;
   });
 }
@@ -619,7 +625,18 @@ document.addEventListener('click', async e => {
       else downloadTrack(t);
       break;
     }
+    case 'shuffle-folder': {
+      const tracks = [...await folderTracks(folder)];
+      for (let i = tracks.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+      }
+      await player.replaceQueue(tracks.slice(1));
+      await player.load(tracks[0]);
+      break;
+    }
     case 'dl-folder': {
+      if (!confirm('Download every track in this folder to this device?')) break;
       for (const t of await folderTracks(folder)) {
         if (!(await downloads.isSaved(t.id))) await downloadTrack(t);
       }
